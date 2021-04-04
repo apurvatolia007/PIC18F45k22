@@ -1,0 +1,757 @@
+		//*** TicTacToe System (Lab1) ***
+/***********************************************************************************************
+    File Name:	ELNC6007AtLab1.c
+    Author:	ATolia
+    Date:	07 Oct, 2020
+    Modified:	None
+    ? Fanshawe College, 2020
+
+    Description: This program is playing a game of TicTacToe on designed circuit that included mirco-controller, 18 pairs of LED, MAX232 and debugger tool. The LED are connected to show the pattern of tictactoeboard. 
+***********************************************************************************************/
+
+// Preprocessor ===================================================================
+
+//Libraries
+#include "pragmas.h"
+#include "p18f45k22.h"
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+// Constants ====================================================================== 
+#define TRUE 1
+#define FALSE 0
+#define ROWS 3
+#define COLS 3
+#define TWO 2
+
+//timer define
+#define TMR01SEC 0x0BDC
+#define T0FLAG INTCONbits.TMR0IF
+
+//Pusbutton defines
+#define INC PORTAbits.RA6
+#define DEC PORTAbits.RA7
+#define ENTER PORTAbits.RA5
+#define MAXTURN 9
+#define PBMASK 0xF0
+#define NOPRESS 0xF0
+#define READPB PBMASK&PORTA
+
+//LED POSITION DEFINES
+#define POSITION00 PORTDbits.RD2 	//PORTD
+#define POSITION01 PORTBbits.RB0	//PORTB
+#define POSITION02 PORTBbits.RB5 	//PORTB
+#define POSITION10 PORTDbits.RD3 	//PORTD
+#define POSITION11 PORTBbits.RB1 	//PORTB
+#define POSITION12 PORTDbits.RD4 	//PORTD
+#define POSITION20 PORTDbits.RD1 	//PORTD
+#define POSITION21 PORTBbits.RB2 	//PORTB
+#define POSITION22 PORTBbits.RB3 	//PORTB
+
+#define LEDOP00    PORTD &= 0xFB
+#define LEDOP01    PORTB &= 0XFE
+#define LEDOP02    PORTB &= 0XDF
+#define LEDOP10    PORTD &= 0XF7
+#define LEDOP11    PORTB &= 0XFD
+#define LEDOP12    PORTB &= 0XEF
+#define LEDOP20    PORTD &= 0XFD
+#define LEDOP21    PORTB &= 0XFB
+#define LEDOP22    PORTB &= 0XF7
+
+//New defines for LED as inputs
+#define LED00INPUT TRISDbits.TRISD2=1
+#define LED01INPUT TRISBbits.TRISB0=1
+#define LED02INPUT TRISBbits.TRISB5=1
+
+#define LED10INPUT TRISDbits.TRISD3=1
+#define LED11INPUT TRISBbits.TRISB1=1
+#define LED12INPUT TRISBbits.TRISB4=1
+
+#define LED20INPUT TRISDbits.TRISD1=1
+#define LED21INPUT TRISBbits.TRISB2=1
+#define LED22INPUT TRISBbits.TRISB3=1
+
+//New defines for LED outputs
+#define LED00OUTPUT TRISDbits.TRISD2=0
+#define LED01OUTPUT TRISBbits.TRISB0=0
+#define LED02OUTPUT TRISBbits.TRISB5=0
+
+#define LED10OUTPUT TRISDbits.TRISD3=0
+#define LED11OUTPUT TRISBbits.TRISB1=0
+#define LED12OUTPUT TRISBbits.TRISB4=0
+
+#define LED20OUTPUT TRISDbits.TRISD1=0
+#define LED21OUTPUT TRISBbits.TRISB2=0
+#define LED22OUTPUT TRISBbits.TRISB3=0
+
+//defines for led 1 on 
+#define LED100ON LATDbits.LATD2=0
+#define LED101ON LATBbits.LATB0=0
+#define LED102ON LATBbits.LATB5=0
+
+#define LED110ON LATDbits.LATD3=0
+#define LED111ON LATBbits.LATB1=0
+#define LED112ON LATBbits.LATB4=0
+
+#define LED120ON LATDbits.LATD1=0
+#define LED121ON LATBbits.LATB2=0
+#define LED122ON LATBbits.LATB3=0
+
+//define for led 2 on
+#define LED200ON LATDbits.LATD2=1
+#define LED201ON LATBbits.LATB0=1
+#define LED202ON LATBbits.LATB5=1
+
+#define LED210ON LATDbits.LATD3=1
+#define LED211ON LATBbits.LATB1=1
+#define LED212ON LATBbits.LATB4=1
+
+#define LED220ON LATDbits.LATD1=1
+#define LED221ON LATBbits.LATB2=1
+#define LED222ON LATBbits.LATB3=1
+
+// Global Variables ===============================================================   
+char pbState; 
+char readPb;
+char userInput=FALSE;
+char indexInp=0;
+char indexRow=0;
+char indexCol=0;
+char variable = 0;
+
+// Structure ======================================================================
+typedef struct gameBoard 	// User defined data type structure
+{
+    char board[ROWS][COLS];
+    char playerTurn;
+    char turnCounter;
+    char winFlag;
+//	char row;
+//	char col;
+}game_t;
+typedef struct TicTacToeSystem //TicTacToeSystem Structure
+{
+	int address;
+	game_t ttt;
+	char select; //small variable to hold the row and column
+	char time[1];
+	char status; // status of game
+}tttSys_t;
+tttSys_t ttt168;  //object of tictactoeSystem
+
+/*** initializeTicTacToeSystem : ******************************************************
+Author:     	ATolia   
+Date:		07 Oct, 2020		
+Modified:	
+Desc:		Initializing the system. 
+Input: 		None
+Returns:	None
+**************************************************************************************/
+void initializeTicTacToeSystem()
+{
+	ttt168.address = 168;
+	for(indexRow = FALSE;indexRow < ROWS;indexRow++)
+    	{
+       		for(indexCol = FALSE;indexCol < COLS;indexCol++)
+        	{
+           		ttt168.ttt.board[indexRow][indexCol] = 0xFF;
+        	}
+    	}
+	indexRow=0; //declare as 0 to use it again
+	indexCol=0; //declare as 0 to use it again
+	ttt168.ttt.turnCounter = FALSE;
+	ttt168.ttt.playerTurn = FALSE ; //X will go first
+	ttt168.ttt.winFlag = FALSE; 
+	ttt168.time[0] = FALSE;
+	ttt168.time[1] = FALSE;
+	ttt168.status = FALSE;
+	ttt168.select=FALSE;
+}
+//eo: initializeTicTacToeSystem :: *************************************************************
+
+/*** portConfig : ******************************************************
+Author:     	ATolia   
+Date:		07 Oct, 2020		
+Modified:	
+Desc:		Ports configuraton according to input or output. 
+Input: 		None
+Returns:	None
+**************************************************************************************/
+void portConfig()
+{
+	ANSELA = 0x00;   //Pushbutton	
+	LATA = 0x00;
+	TRISA = 0xF0;
+
+	ANSELB &=0x00;	
+	LATB   &=0x00;
+	TRISB |= 0xFF;  // LED on 0,1,2,3,4,5 for PORTB
+  
+	//ANSELC &=0x00;
+	//LATC   &=0x00;   
+	//TRISC  |= 0x3F;		// 6 and 7 pin of PORTC is serial and 4th pin is LED Postition 20
+
+
+	ANSELD&= 0x00;
+	LATD  &= 0x00;
+	TRISD |= 0xFF; 			//port d pin 1, 2 and 3 is LED position 00 and 10
+
+}
+//eo: portConfig :: *************************************************************
+
+
+
+/*** setupOsc : ******************************************************
+Author:     	ATolia   
+Date:		07 Oct, 2020		
+Modified:	
+Desc:		Oscillator intialization 
+Input: 		None
+Returns:	None
+**************************************************************************************/
+void setupOsc()
+{
+	OSCCON  = 0x52;   //4 MHz ocsillator configuration 
+	OSCCON2 = 0x04; 
+	OSCTUNE = 0x80; 
+	while (OSCCONbits.HFIOFS != 1);
+}
+//eo: setupOsc :: *************************************************************
+
+
+/*** serialConfig : ******************************************************
+Author:     	ATolia   
+Date:		07 Oct, 2020		
+Modified:	
+Desc:		Serial port configuration for display. 
+Input: 		None
+Returns:	None
+**************************************************************************************/
+void serialConfig()
+{
+	SPBRG1= 25;                 
+	TXSTA1= 0x26;              
+	RCSTA1= 0X90;              
+	BAUDCON1=0X40;
+}
+//eo: serialConfig :: *************************************************************
+
+
+/*** serialPortConfig() : ******************************************************
+Author:     	ATolia   
+Date:		07 Oct, 2020		
+Modified:	
+Desc:		Serial port configuration for display. 
+Input: 		None
+Returns:	None
+**************************************************************************************/
+void serialPortConfig()
+{
+	ANSELC &= 0x00;
+	LATC  &= 0x00;
+	TRISC |= 0xC0;
+}
+//eo: serialPortConfig() :: *************************************************************
+
+/*** T0Config : ******************************************************
+Author:     	ATolia   
+Date:		07 Oct, 2020		
+Modified:	
+Desc:		Timer0 configuration. 
+Input: 		None
+Returns:	None
+**************************************************************************************/
+void T0Config(int count)
+{
+	T0CON=0x93;
+	TMR0H=count>>8;
+	TMR0L=count;
+	T0FLAG=FALSE; //intilally T0Flag as FALSE
+}
+//eo: T0Config :: *************************************************************
+
+
+/*** T0Reset : ******************************************************
+Author:     	ATolia   
+Date:		07 Oct, 2020		
+Modified:	
+Desc:		Timer0 reset. 
+Input: 		None
+Returns:	None
+**************************************************************************************/
+void T0Reset(int count)
+{
+	T0FLAG=FALSE;
+	TMR0H=count>>8; //to shift in higher nibbble
+	TMR0L=count;    // to input in lower nibble
+}
+//eo: T0Reset :: *************************************************************
+
+/*** timeDisplay : ******************************************************
+Author:     	ATolia   
+Date:		07 Oct, 2020		
+Modified:	
+Desc:		Timer0 reset. 
+Input: 		None
+Returns:	None
+**************************************************************************************/
+void timeDisplay()
+{
+while(T0FLAG==TRUE)
+{
+	T0FLAG=FALSE;
+	ttt168.time[FALSE]=ttt168.time[FALSE] + 1;
+	if(ttt168.time[FALSE]>=60)
+	{
+		ttt168.time[FALSE]=FALSE;
+		ttt168.time[TRUE]=ttt168.time[TRUE]+1;
+		if(ttt168.time[TRUE]>=60)
+		{
+			ttt168.time[TRUE]=FALSE;
+			ttt168.time[FALSE]=FALSE;
+		}
+	}	
+}
+}
+/*** intializeSystem : ******************************************************
+Author:     	ATolia   
+Date:		07 Oct, 2020		
+Modified:	
+Desc:		System intialization. (Calling all above functions inside this) 
+Input: 		None
+Returns:	None
+**************************************************************************************/
+void intializeSystem()
+{
+	setupOsc();     		// oscillator setup
+	portConfig();			//ALL port Cnfig
+	serialConfig(); 		//serial config
+	serialPortConfig(); 	//serial PortConfig
+	T0Config(TMR01SEC);   		//Timer configuration
+	initializeTicTacToeSystem();//Intialiaze system 
+	timeDisplay();   			//To display time
+}
+//eo: intializeSystem :: *************************************************************
+
+
+
+/*** winCheck : ******************************************************
+Author:     	ATolia   
+Date:		07 Oct, 2020		
+Modified:	
+Desc:		Winner checking function. 
+Input: 		None
+Returns:	None
+**************************************************************************************/
+void winCheck()
+{
+	//row checks
+	char iterationVar;
+	for (iterationVar = FALSE; iterationVar <=2; iterationVar++)
+	{
+		if(ttt168.ttt.board[iterationVar][FALSE] == 'X' && ttt168.ttt.board[iterationVar][TRUE] == 'X' && ttt168.ttt.board[iterationVar][TWO] == 'X') 
+		{
+			ttt168.ttt.winFlag = TRUE;
+			printf("Player X win");
+		}
+		if ((ttt168.ttt.board[iterationVar][FALSE] == 'O' && ttt168.ttt.board[iterationVar][TRUE] == 'O' && ttt168.ttt.board[iterationVar][TWO] == 'O'))
+		{
+			ttt168.ttt.winFlag = TRUE;
+			printf("Player O win");
+		}
+	}
+	//Column check
+	for (iterationVar = FALSE; iterationVar <=2; iterationVar++)
+	{
+		if ((ttt168.ttt.board[FALSE][iterationVar] == 'X' && ttt168.ttt.board[TRUE][iterationVar] == 'X' && ttt168.ttt.board[TWO][iterationVar] == 'X') )
+		{
+			ttt168.ttt.winFlag = TRUE;
+			printf("Player X win");
+		}
+		if (ttt168.ttt.board[FALSE][iterationVar] == 'O' && ttt168.ttt.board[TRUE][iterationVar] == 'O' && ttt168.ttt.board[TWO][iterationVar] == 'O')
+		{
+			ttt168.ttt.winFlag = TRUE;
+			printf("Player O win");
+		}
+	}
+	//Diagonals check
+	if ((ttt168.ttt.board[FALSE][FALSE] == 'X' && ttt168.ttt.board[TRUE][TRUE] == 'X' && ttt168.ttt.board[TWO][TWO] == 'X') )
+	{
+		ttt168.ttt.winFlag = TRUE;
+		printf("Player X win");
+	}
+	if ((ttt168.ttt.board[FALSE][FALSE] == 'O' && ttt168.ttt.board[TRUE][TRUE] == 'O' && ttt168.ttt.board[TWO][TWO] == 'O'))
+	{
+		ttt168.ttt.winFlag = TRUE;
+		printf("Player O win");
+	}
+	if ((ttt168.ttt.board[FALSE][TWO] == 'X' && ttt168.ttt.board[TRUE][TRUE] == 'X' && ttt168.ttt.board[TWO][FALSE] == 'X') )
+	{
+		ttt168.ttt.winFlag = TRUE;
+		printf("Player X win");
+	}
+	if (ttt168.ttt.board[FALSE][TWO] == 'O' && ttt168.ttt.board[TRUE][TRUE] == 'O' && ttt168.ttt.board[TWO][FALSE] == 'O')
+	{
+		ttt168.ttt.winFlag = TRUE;
+		printf("Player O win"); 
+	}
+}
+//eo: winCheck :: *************************************************************
+
+
+
+
+/*** updateLed : ******************************************************
+Author:     	ATolia   
+Date:		07 Oct, 2020		
+Modified:	
+Desc:		LED function. 
+Input: 		None
+Returns:	None
+**************************************************************************************/
+void updateLed()
+{
+	// check which board locations are occupied with which value
+	// location 0 0
+	if(ttt168.ttt.board[0][0] == 'X') // player 1
+	{
+		TRISD &= 0xFB;		// rd2 pin 21
+		POSITION00=TRUE;
+	}
+	if(ttt168.ttt.board[0][0] == 'O') // player 2
+	{
+		LED00OUTPUT; 
+	    LED100ON; 
+	}
+	// location 0 1		//	rb0 pin 33 
+	if(ttt168.ttt.board[0][1] == 'X') // player 1
+	{
+		TRISB &= 0xFE;
+		POSITION01=TRUE;																
+	}	
+    if(ttt168.ttt.board[0][1] == 'O') // player 2
+	{
+		LED01OUTPUT;
+    	LED101ON;														
+	}
+	// location 0 2						// rb5 pin 38
+	if(ttt168.ttt.board[0][2] == 'X') // player 1
+	{
+		TRISB &= 0xDF;
+		POSITION02=TRUE;																	
+	}	
+	if(ttt168.ttt.board[0][2] == 'O' ) // player 2
+	{
+		LED02OUTPUT; 
+		LED102ON;																	
+	}
+	// location 1 0																				// rd3 pin 22
+	if(ttt168.ttt.board[1][0] == 'X') // player 1
+	{
+		TRISD &= 0xF7;	
+		POSITION10=TRUE;																
+	}
+	if(ttt168.ttt.board[1][0] == 'O' ) // player 2
+	{	
+		LED10OUTPUT; 
+		LED110ON;	
+	}																						
+	// location 1 1																				// rb1 pin 34
+	if(ttt168.ttt.board[1][1] == 'X') // player 1
+	{
+		TRISB &= 0xFD;
+		POSITION11=TRUE;																	
+	}
+	if(ttt168.ttt.board[1][1] == 'O') // player 2
+	{
+ 		LED11OUTPUT;
+ 		LED111ON; 
+	}
+	// location 1 2																				// rb4 pin 37 
+	if(ttt168.ttt.board[1][2] == 'X') // player 1
+	{
+		TRISB &= 0xEF;
+		POSITION12=TRUE;																	
+	}	
+	if(ttt168.ttt.board[1][2] =='O') // player 2
+	{
+		LED12OUTPUT; 
+		LED112ON; 																		
+	}
+	// location 2 0																				// rd1 pin 23
+	if(ttt168.ttt.board[2][0] == 'X') // player 1
+	{
+		TRISD &= 0xFD;
+		POSITION20=TRUE;																
+	}
+	if(ttt168.ttt.board[2][0] == 'O') // player 2
+	{
+		LED20OUTPUT; 
+ 		LED120ON; 	
+	}	
+	// location 2 1																				// rb2 pin 35
+	if(ttt168.ttt.board[2][1] == 'X') // player 1
+	{
+		TRISB &= 0xFB;
+		POSITION21=TRUE;																	
+	}
+	if(ttt168.ttt.board[2][1] == 'O') // player 2
+	{
+		LED21OUTPUT; 
+	    LED121ON;																
+	}
+	// location 2 2																				// rb3 pin 36
+	if(ttt168.ttt.board[2][2] == 'X') // player 1
+	{
+		TRISB &= 0xF7;
+		POSITION22=TRUE; 																	
+	}
+	if(ttt168.ttt.board[2][2] == 'O') // player 2
+	{
+		LED22OUTPUT; 
+		LED122ON; 
+	}
+}
+//eo: updateLed :: *************************************************************
+
+/*** incrementVar : ******************************************************
+Author:     	ATolia   
+Date:		07 Oct, 2020		
+Modified:	
+Desc:		increment pushbutton function. 
+Input: 		None
+Returns:	None
+**************************************************************************************/
+void incrementVar()
+{
+	if(indexInp==FALSE ) //indexInp FALSE for ROW
+	{
+		indexRow++;
+		ttt168.select=indexRow;
+		if(indexRow>2)
+		{
+			indexRow=0;
+		}
+		if(ttt168.select>2 || ttt168.select<0)
+		{
+			ttt168.select=0;
+		}	
+	}
+	else if(indexInp==TRUE) //indexInp TRUE for COL
+	{
+		indexCol++;
+		ttt168.select=indexCol;
+		if(indexCol>2)
+		{
+			indexCol=0;
+		}	
+		if(ttt168.select>2 || ttt168.select<0)
+		{
+			ttt168.select=0;
+		}
+	}
+}
+//eo: incrementVar :: *************************************************************
+
+
+/*** decrementVar : ******************************************************
+Author:     	ATolia   
+Date:		07 Oct, 2020		
+Modified:	
+Desc:		decrement pushbutton function. 
+Input: 		None
+Returns:	None
+**************************************************************************************/
+void decrementVar()
+{
+	if(indexInp==FALSE ) //indexInp FALSE for ROW
+	{
+		indexRow--;
+		ttt168.select=indexRow;
+		if(indexRow<0)
+		{
+			indexRow=2;
+		}
+		if(ttt168.select>2 || ttt168.select<0)
+		{
+			ttt168.select=2;
+		}
+	}
+	else if(indexInp==TRUE) //indexInp TRUE for COl
+	{
+		indexCol--;
+		ttt168.select=indexCol;
+		if(indexCol<0)
+		{
+			indexCol=2;
+		}	
+		if(ttt168.select>2 || ttt168.select<0) //range for select
+		{
+			ttt168.select=2;	
+		}
+	}
+}
+//eo: decrementVar :: *************************************************************
+
+/*** ledOff : ******************************************************
+Author:     	ATolia   
+Date:		07 Oct, 2020		
+Modified:	
+Desc:		All leds off before the start of the game. 
+Input: 		None
+Returns:	None
+**************************************************************************************/
+void ledOff() //ALL led off at last the game is played
+{
+	LED00INPUT;
+	LED01INPUT; 
+	LED02INPUT; 
+	LED10INPUT; 
+	LED11INPUT; 
+	LED12INPUT; 
+	LED20INPUT; 
+	LED21INPUT; 
+	LED22INPUT; 	
+}
+//eo: ledOff :: *************************************************************
+
+
+/*** buttonPress : ******************************************************
+Author:     	ATolia   
+Date:		07 Oct, 2020		
+Modified:	
+Desc:		All pushbuttons work with the help of this function.
+Input: 		None
+Returns:	None
+**************************************************************************************/
+void buttonPress()
+{
+	char lastState=FALSE;
+	pbState=READPB;
+	readPb=READPB;
+	
+	if((readPb!=PBMASK) && (lastState!=pbState)) //PBMASK is 0xF0, pbState=READPB=PORTA&PBMASK, lastState defined as false, and 
+	{
+		lastState=pbState;
+		pbState=READPB;
+		if(INC==0) //inc button is pressed PORTA.RA6 bits will be 0
+		{
+			incrementVar();
+		}
+		if(DEC==0) //dec button is pressed PORTA.RA7 bits will be 0
+		{
+			decrementVar();
+		}
+		if(ENTER==0) //enter button is pressed PORTA.RA6 bits will be 0
+		{
+			if(indexInp == FALSE)
+			{	
+				indexInp=TRUE;
+			}
+			else if(indexInp == TRUE)
+			{
+				if(ttt168.ttt.board[indexRow][indexCol] !='X' && ttt168.ttt.board[indexRow][indexCol] !='O' && ttt168.ttt.winFlag != TRUE)
+				{
+					if(ttt168.ttt.playerTurn==0)
+					{
+						ttt168.ttt.board[indexRow][indexCol]='X';
+						ttt168.ttt.playerTurn=1;
+					}
+					else if(ttt168.ttt.playerTurn==1)
+					{
+						ttt168.ttt.board[indexRow][indexCol]='O';
+						ttt168.ttt.playerTurn=0;
+					}
+				}
+				else
+				{
+					printf("\e[1;0H\r Invalid Selection! Try again");
+				}
+				ttt168.ttt.turnCounter++;
+				indexInp=FALSE;
+				updateLed();
+			}
+		}
+		else if(READPB==PBMASK)
+		{
+			lastState=FALSE;	
+		}
+	}
+}
+//eo: buttonPress :: *************************************************************
+
+
+
+/*** updateDisplay : ******************************************************
+Author:     	ATolia   
+Date:		07 Oct, 2020		
+Modified:	
+Desc:		display function.
+Input: 		None
+Returns:	None
+**************************************************************************************/
+void updateDisplay()
+{
+	timeDisplay();
+ 	printf("\e[2;0H\r           TicTacToe168 \t GAME TIME:%02d:%02d \tStatus: ",ttt168.time[TRUE],ttt168.time[FALSE]);		//address variable, ss and hh , status bit
+	
+	if((!(ttt168.ttt.turnCounter%2))|| ttt168.ttt.turnCounter==0)
+	{
+		printf("\e[3;0H\rPlayer:X  \t Turn Count %d",ttt168.ttt.turnCounter);	//variable for Player X or O, and turn count variable 
+	}
+	else
+	{
+		printf("\e[3;0H\rPlayer:O \t Turn Count %d",ttt168.ttt.turnCounter);	//variable for Player X or O, and turn count variable 
+	}
+	if(indexInp==FALSE)
+	{
+		printf("\e[4;0H\r ROW select");						//showing col input
+	}
+	else if(indexInp==TRUE)
+	{
+		printf("\e[4;0H\r COLS select");						//showing col input
+	}
+	printf("\e[5;0H\r select: %d",ttt168.select);//showing col input
+	printf("\e[6;0H\r  COLUMN    0    1    2    ");//board showing row 0 1 2; no change
+	printf("\e[7;0H\r     0     %c | %c |  %c    ",ttt168.ttt.board[0][0],ttt168.ttt.board[0][1],ttt168.ttt.board[0][2]);	//row 0 to display which has array call
+	printf("\e[8:0H\r  R        ------------------");//to create pound like sign
+	printf("\e[9:0H\r  O  1     %c |  %c | %c    ",ttt168.ttt.board[1][0],ttt168.ttt.board[1][1],ttt168.ttt.board[1][2]);	//row 1 to display which has array call
+	printf("\e[10:0H\r  W       ------------------");//to create pound like sign
+	printf("\e[11:0H\r     2     %c |  %c |  %c  ",ttt168.ttt.board[2][0],ttt168.ttt.board[2][1],ttt168.ttt.board[2][2]);		//row 3 to display which has array call
+	printf("\e[12:0H\r ");
+	printf("\e[13:0H\r indexRow %d  indexCol %d" ,indexRow, indexCol);
+	while(ttt168.ttt.winFlag==TRUE)
+	{
+		if(ttt168.ttt.turnCounter%2)
+		{
+			printf("\e[14:0H\r Player O win");
+		}	
+		else
+		{
+			printf("\e[14:0H\r Player X win");
+		}	
+	}
+}
+//eo: updateDisplay :: *************************************************************
+
+
+
+
+
+/*********************************************************************************
+***** MAIN FUNCTION **************************************************************
+**********************************************************************************/
+
+void main()
+{
+	intializeSystem();
+	while((ttt168.ttt.turnCounter <= MAXTURN) && (ttt168.ttt.winFlag != TRUE))
+	{
+		updateDisplay(); //To show display
+		buttonPress(); //all the button press function and game properties.
+		winCheck();   // To check if there is win.
+	}
+	ledOff(); //turning all led off (game reset)	
+}
+	
